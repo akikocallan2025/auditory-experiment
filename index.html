@@ -52,8 +52,9 @@
   <div class="app">
     <!-- START SCREEN -->
     <section id="screen-start" class="card grid">
-      <h1>オンライン聴覚実験（WAV）</h1>
+      <h1>オンライン聴覚実験</h1>
       <ol>
+        <li>正面を左から右または右から左に動く音が２回聞こえます。どちらが曲がって動いているように聞こえたかを１または２で答えてください。</li>
         <li>ヘッドホンをご使用ください（左右が正しく装着されているかご確認ください）。</li>
         <li>静かな環境で実施してください。</li>
         <li>下のテスト音で音量を調整してから開始してください。</li>
@@ -86,8 +87,8 @@
         <summary>反応キー（デフォルト）</summary>
         <div class="notice">
           <div class="kbdrow">
-            <div><span class="kbd">1</span> = 直線　/ 選択1</div>
-            <div><span class="kbd">2</span> = 曲線 / 選択2</div>
+            <div><span class="kbd">1</span> = 1　/ 選択1</div>
+            <div><span class="kbd">2</span> = 2 / 選択2</div>
           </div>
           <p class="small">必要に応じてスクリプト中の <code>KEYMAP</code> を変更してください。</p>
         </div>
@@ -126,10 +127,14 @@
     // 2) 試行リスト（必要に応じて列を増やしてください）
     //    id: 任意のラベル, file: WAVファイル名, cond: 条件名
     const TRIALS_MASTER = [
-      { id: "ex1", file: "cLR.wav",  cond: "C", correctKey: "2" },
-      { id: "ex2", file: "cRL.wav", cond: "C", correctKey: "2" },
-      { id: "ex3", file: "sLR.wav",  cond: "S", correctKey: "1" },
-      { id: "ex4", file: "sRL.wav", cond: "S", correctKey: "1" },
+      { id: "ex1", file: "straightLR_CS.wav",  cond: "1", correctKey: "1" },
+      { id: "ex2", file: "straightLR_SC.wav", cond: "2", correctKey: "2" },
+      { id: "ex3", file: "straightRL_CS.wav",  cond: "1", correctKey: "1" },
+      { id: "ex4", file: "straightRL_SC.wav", cond: "2", correctKey: "2" },
+      { id: "ex1", file: "straightLR_CS.wav",  cond: "1", correctKey: "1" },
+      { id: "ex2", file: "straightLR_SC.wav", cond: "2", correctKey: "2" },
+      { id: "ex3", file: "straightRL_CS.wav",  cond: "1", correctKey: "1" },
+      { id: "ex4", file: "straightRL_SC.wav", cond: "2", correctKey: "2" },
     ];
 
     // 3) 練習試行数
@@ -303,7 +308,7 @@
       // optional prompt
       if (PROMPT_MS > 0) {
         $phase.textContent = '課題';
-        $prompt.textContent = '左右どちら？ (F=左 / J=右)';
+        $prompt.textContent = '曲がっているのは？ (1 / 2)';
         await sleep(PROMPT_MS);
       }
 
