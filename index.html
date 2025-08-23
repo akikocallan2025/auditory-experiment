@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>聴覚実験（WAV / WebAudio）</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --card: #121936;
+      --text: #e9ecf1;
+      --muted: #a9b0c7;
+      --accent: #6ca2ff;
+      --ok: #41d695;
+      --warn: #ffb454;
+      --err: #ff6b6b;
+    }
+    html, body { height: 100%; }
+    body {
+      margin: 0; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", Meiryo, "Noto Sans JP", "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      background: radial-gradient(1200px 800px at 70% -10%, #1a224a 0%, var(--bg) 60%);
+      color: var(--text); display: grid; place-items: center;
+    }
+    .app { width: min(920px, 92vw); }
+    .card { background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)); border: 1px solid rgba(255,255,255,0.08); border-radius: 18px; padding: 24px 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.35); }
+    h1 { font-size: clamp(22px, 3.2vw, 32px); margin: 0 0 12px; letter-spacing: 0.5px; }
+    h2 { font-size: clamp(18px, 2.5vw, 24px); margin: 20px 0 10px; }
+    p, li, label { color: var(--muted); line-height: 1.7; }
+    .muted { color: var(--muted); }
+    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .grid { display: grid; gap: 14px; }
+    .btn { appearance: none; border: 1px solid rgba(255,255,255,0.15); color: var(--text); background: #18214a; border-radius: 12px; padding: 12px 16px; font-weight: 600; cursor: pointer; transition: 160ms transform ease, 160ms filter ease; }
+    .btn:hover { filter: brightness(1.06); transform: translateY(-1px); }
+    .btn:disabled { opacity: .5; cursor: not-allowed; transform:none; }
+    .btn.primary { background: linear-gradient(180deg, #5b86ff, #3f66ff); border-color: rgba(0,0,0,.15); }
+    .btn.ghost { background: transparent; }
+    .kbd { background: rgba(255,255,255,0.09); border: 1px solid rgba(255,255,255,0.16); padding: 2px 6px; border-radius: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #fff; }
+    .bar { height: 10px; background: rgba(255,255,255,0.08); border-radius: 999px; overflow: hidden; border: 1px solid rgba(255,255,255,0.12); }
+    .bar > span { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, #41d695, #5b86ff); transition: width 220ms ease; }
+    .center { text-align: center; }
+    .hidden { display: none !important; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .big { font-size: clamp(26px, 5vw, 48px); letter-spacing: 2px; }
+    .fix { font-size: clamp(40px, 6vw, 64px); }
+    .notice { padding: 12px 14px; border: 1px dashed rgba(255,255,255,0.25); border-radius: 12px; background: rgba(255,255,255,0.03); }
+    .kbdrow { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+    .kbdrow .kbd { display:inline-block; min-width: 28px; text-align:center; }
+    .small { font-size: 12px; opacity: 0.8; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- START SCREEN -->
+    <section id="screen-start" class="card grid">
+      <h1>オンライン聴覚実験（WAV）</h1>
+      <p>このページは <b>Web Audio API</b> を用いて <b>WAVファイル</b> を低遅延で再生し、<b>キーボード反応</b>を収集する単一HTMLです。ローカルでもサーバ上でも動作します（CORS設定に注意）。</p>
+      <ol>
+        <li>ヘッドホンをご使用ください（左右が正しく装着されているかご確認ください）。</li>
+        <li>静かな環境で実施してください。</li>
+        <li>下のテスト音で音量を調整してから開始してください。</li>
+      </ol>
+
+      <div class="row">
+        <button id="btn-tone" class="btn">テスト音を再生</button>
+        <span id="tone-status" class="muted">未再生</span>
+      </div>
+
+      <label>
+        <input type="checkbox" id="consent" /> 研究目的で反応データを匿名で保存することに同意します。
+      </label>
+
+      <div class="row">
+        <label>参加者ID: <input id="pid" class="mono" placeholder="e.g., S001" /></label>
+        <button id="btn-preload" class="btn">刺激のプリロード</button>
+      </div>
+
+      <div class="bar"><span id="preload-bar"></span></div>
+      <div class="row"><span id="preload-label" class="muted">0%</span></div>
+
+      <div class="row">
+        <button id="btn-begin" class="btn primary" disabled>実験を開始</button>
+        <button id="btn-practice" class="btn ghost" disabled>練習（数試行）</button>
+      </div>
+      <p class="small">再生はユーザー操作後のみ許可されます（ブラウザ仕様）。開始ボタンを押すとオーディオコンテキストが有効化されます。</p>
+
+      <details>
+        <summary>反応キー（デフォルト）</summary>
+        <div class="notice">
+          <div class="kbdrow">
+            <div><span class="kbd">F</span> = 左 / 選択1</div>
+            <div><span class="kbd">J</span> = 右 / 選択2</div>
+          </div>
+          <p class="small">必要に応じてスクリプト中の <code>KEYMAP</code> を変更してください。</p>
+        </div>
+      </details>
+    </section>
+
+    <!-- FIXATION / STIM / RESPONSE SCREEN -->
+    <section id="screen-task" class="card grid hidden">
+      <div class="center" id="phase"></div>
+      <div class="center big" id="prompt"></div>
+      <div class="center fix" id="fixation">+</div>
+      <div class="center muted" id="progress"></div>
+      <div class="center muted small" id="hint"></div>
+    </section>
+
+    <!-- END SCREEN -->
+    <section id="screen-end" class="card grid hidden">
+      <h2>終了しました。ご協力ありがとうございました。</h2>
+      <p>下のボタンから <b>CSV</b> をダウンロードできます。必要に応じてメール添付やクラウドにアップロードしてください。</p>
+      <div class="row">
+        <button id="btn-download" class="btn">CSVをダウンロード</button>
+        <button id="btn-restart" class="btn ghost">もう一度</button>
+      </div>
+      <p id="summary" class="muted"></p>
+    </section>
+  </div>
+
+  <script>
+    // ================================
+    // ▼▼ 実験設定（ここを編集） ▼▼
+    // ================================
+
+    // 1) 刺激ファイルの場所（同じフォルダ or 絶対URL）
+    const STIM_BASE = "./stimuli/"; // 例: 同階層に /stimuli を置く
+
+    // 2) 試行リスト（必要に応じて列を増やしてください）
+    //    id: 任意のラベル, file: WAVファイル名, cond: 条件名
+    const TRIALS_MASTER = [
+      { id: "ex1", file: "cLR.wav",  cond: "L", correctKey: "F" },
+      { id: "ex2", file: "cRL.wav", cond: "R", correctKey: "J" },
+      { id: "ex3", file: "sLR.wav",  cond: "L", correctKey: "F" },
+      { id: "ex4", file: "sRL.wav", cond: "R", correctKey: "J" },
+    ];
+
+    // 3) 練習試行数
+    const N_PRACTICE = 2;
+
+    // 4) タイミング（ミリ秒）
+    const ITI_MS = 700;          // 試行間間隔
+    const FIX_MS = 500;          // 固視
+    const PROMPT_MS = 0;         // 刺激提示前にプロンプトを出す場合
+
+    // 5) 反応キー設定（大文字で格納）
+    const KEYMAP = {
+      LEFT: "F",   // 左 / 選択1
+      RIGHT: "J",  // 右 / 選択2
+    };
+
+    // 6) 反応受付："stim_onset"（提示開始） or "stim_offset"（提示終了）からのRT
+    const RT_REF = "stim_onset";
+
+    // 7) 刺激再生のゲイン（相対）
+    const MASTER_GAIN = 1.0;
+
+    // ================================
+    // ▼▼ 以下は基本ロジック（編集不要） ▼▼
+    // ================================
+
+    const $ = (sel) => document.querySelector(sel);
+    const $start = $('#screen-start');
+    const $task = $('#screen-task');
+    const $end = $('#screen-end');
+    const $fix = $('#fixation');
+    const $phase = $('#phase');
+    const $prompt = $('#prompt');
+    const $progress = $('#progress');
+    const $hint = $('#hint');
+    const $bar = $('#preload-bar');
+    const $barLabel = $('#preload-label');
+
+    const $btnTone = $('#btn-tone');
+    const $btnPreload = $('#btn-preload');
+    const $btnBegin = $('#btn-begin');
+    const $btnPractice = $('#btn-practice');
+    const $btnDownload = $('#btn-download');
+    const $btnRestart = $('#btn-restart');
+
+    let ACtx;                 // AudioContext
+    let masterOut;            // 最終出力ノード
+    let preloaded = {};       // { url: AudioBuffer }
+    let trials = [];          // 実験用にシャッフルされた配列
+    let isPractice = false;
+
+    let runState = {
+      pid: null,
+      startedAt: null,
+      trialIndex: -1,
+      awaiting: false,
+      bufferSource: null,
+      stimStartTimeAC: null,  // AudioContext.currentTime での提示開始
+      stimEndTimeAC: null,
+      results: [],
+    };
+
+    function initAudio() {
+      if (!ACtx) {
+        ACtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100 });
+        masterOut = ACtx.createGain();
+        masterOut.gain.value = MASTER_GAIN;
+        masterOut.connect(ACtx.destination);
+      }
+      if (ACtx.state === 'suspended') ACtx.resume();
+    }
+
+    async function fetchArrayBuffer(url) {
+      const res = await fetch(url, { cache: 'force-cache' });
+      if (!res.ok) throw new Error('Failed to fetch ' + url);
+      return await res.arrayBuffer();
+    }
+
+    async function preloadAll(list) {
+      initAudio();
+      let done = 0; const total = list.length;
+      for (const t of list) {
+        const url = STIM_BASE + t.file;
+        if (preloaded[url]) { done++; updateBar(done,total); continue; }
+        try {
+          const buf = await fetchArrayBuffer(url);
+          const audioBuf = await ACtx.decodeAudioData(buf);
+          preloaded[url] = audioBuf;
+        } catch (e) {
+          console.error('Preload error', url, e);
+          alert('プリロード失敗: ' + url + '\nファイルパスまたはCORS設定を確認してください。');
+        }
+        done++; updateBar(done,total);
+      }
+    }
+
+    function updateBar(done, total) {
+      const pct = Math.round((done/total)*100);
+      $bar.style.width = pct + '%';
+      $barLabel.textContent = pct + '%';
+      const allReady = pct === 100;
+      $btnBegin.disabled = !allReady || !$('#consent').checked || !$('#pid').value.trim();
+      $btnPractice.disabled = $btnBegin.disabled;
+    }
+
+    function shuffle(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    function buildTrials(n=null) {
+      const base = TRIALS_MASTER.map(o => ({...o}));
+      const seq = shuffle(base);
+      if (n) return seq.slice(0, n);
+      return seq;
+    }
+
+    function show(el) { $start.classList.add('hidden'); $task.classList.add('hidden'); $end.classList.add('hidden'); el.classList.remove('hidden'); }
+
+    function showFixation() {
+      $phase.textContent = '準備';
+      $prompt.textContent = '';
+      $hint.textContent = '反応キー: F / J';
+      $fix.classList.remove('hidden');
+    }
+
+    function setProgress(i, total) {
+      $progress.textContent = `Trial ${i+1} / ${total}`;
+    }
+
+    function playBuffer(buf) {
+      if (!buf) return;
+      const src = ACtx.createBufferSource();
+      src.buffer = buf;
+      src.connect(masterOut);
+      src.onended = () => {
+        runState.stimEndTimeAC = ACtx.currentTime;
+        if (RT_REF === 'stim_offset' && runState.awaiting) {
+          // RT from offset
+          // nothing else needed here — waiting for key
+        }
+      };
+      src.start();
+      return src;
+    }
+
+    function nowISO() { return new Date().toISOString(); }
+
+    function msFromAC(start, end) { return Math.round((end - start) * 1000); }
+
+    async function runBlock() {
+      runState.startedAt = performance.now();
+      runState.trialIndex = -1;
+      await nextTrial();
+    }
+
+    async function nextTrial() {
+      runState.trialIndex++;
+      if (runState.trialIndex >= trials.length) { return finish(); }
+
+      const t = trials[runState.trialIndex];
+      setProgress(runState.trialIndex, trials.length);
+
+      // ITI
+      showFixation();
+      await sleep(ITI_MS);
+
+      // optional prompt
+      if (PROMPT_MS > 0) {
+        $phase.textContent = '課題';
+        $prompt.textContent = '左右どちら？ (F=左 / J=右)';
+        await sleep(PROMPT_MS);
+      }
+
+      // Stimulus
+      $phase.textContent = '刺激提示中';
+      $fix.classList.add('hidden');
+      $prompt.textContent = '';
+
+      const url = STIM_BASE + t.file;
+      const buf = preloaded[url];
+      if (!buf) {
+        alert('未プリロード: ' + url);
+        return finish();
+      }
+
+      runState.awaiting = true;
+      runState.stimStartTimeAC = ACtx.currentTime;
+      runState.bufferSource = playBuffer(buf);
+
+      // 受付はここで開始
+      // RT基準時間
+      const rtZeroAC = (RT_REF === 'stim_onset') ? runState.stimStartTimeAC : null;
+
+      // 待機：反応は keydown ハンドラが処理
+    }
+
+    function onKeyDown(ev) {
+      if (!runState.awaiting) return;
+      const key = ev.key.toUpperCase();
+      const valid = [KEYMAP.LEFT, KEYMAP.RIGHT];
+      if (!valid.includes(key)) return;
+
+      runState.awaiting = false;
+      const t = trials[runState.trialIndex];
+
+      // RT基準（onset/offset）
+      const ref = (RT_REF === 'stim_onset') ? runState.stimStartTimeAC : runState.stimEndTimeAC;
+      const rt_ms = (ref != null) ? msFromAC(ref, ACtx.currentTime) : NaN;
+
+      // 停止（必要なら）
+      try { runState.bufferSource?.stop(); } catch {}
+
+      const correct = t.correctKey ? (key === t.correctKey.toUpperCase()) : null;
+      const row = {
+        timestamp: nowISO(),
+        pid: runState.pid,
+        trial: runState.trialIndex+1,
+        id: t.id,
+        file: t.file,
+        cond: t.cond,
+        key,
+        rt_ms,
+        correct,
+        ua: navigator.userAgent,
+      };
+      runState.results.push(row);
+
+      // 次試行へ
+      nextTrial();
+    }
+
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    function toCSV(rows) {
+      const headers = Object.keys(rows[0] || {x:1}).join(',');
+      const escape = (v) => {
+        if (v == null) return '';
+        const s = String(v).replace(/"/g, '""');
+        return (/,|\n|\"/.test(s)) ? `"${s}"` : s;
+      };
+      const body = rows.map(r => Object.keys(rows[0]).map(k => escape(r[k])).join(',')).join('\n');
+      return headers + '\n' + body + '\n';
+    }
+
+    function downloadCSV(filename, rows) {
+      const blob = new Blob([toCSV(rows)], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename; a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function finish() {
+      show($end);
+      const n = runState.results.length;
+      const meanRT = Math.round(runState.results.reduce((s,r)=> s + (r.rt_ms||0), 0) / Math.max(1,n));
+      $('#summary').textContent = `全${n}試行 / 平均RT ≈ ${isFinite(meanRT)?meanRT:'-'} ms`;
+    }
+
+    // ================================
+    // UI: handlers
+    // ================================
+    $btnTone.addEventListener('click', async () => {
+      initAudio();
+      $('#tone-status').textContent = '再生中…';
+      // 500Hz サイン波 300ms
+      const osc = ACtx.createOscillator();
+      const g = ACtx.createGain();
+      g.gain.setValueAtTime(0.0001, ACtx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.3, ACtx.currentTime + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, ACtx.currentTime + 0.30);
+      osc.type = 'sine';
+      osc.frequency.value = 500;
+      osc.connect(g).connect(masterOut);
+      osc.start();
+      osc.stop(ACtx.currentTime + 0.32);
+      osc.onended = () => { $('#tone-status').textContent = '完了'; };
+    });
+
+    $btnPreload.addEventListener('click', async () => {
+      const ok = $('#consent').checked;
+      const pid = $('#pid').value.trim();
+      if (!ok) { alert('同意にチェックしてください。'); return; }
+      if (!pid) { alert('参加者IDを入力してください。'); return; }
+      runState.pid = pid;
+      trials = buildTrials();
+      await preloadAll(trials);
+    });
+
+    $btnBegin.addEventListener('click', async () => {
+      initAudio();
+      isPractice = false;
+      // 本試行
+      trials = buildTrials();
+      window.addEventListener('keydown', onKeyDown);
+      show($task);
+      await runBlock();
+    });
+
+    $btnPractice.addEventListener('click', async () => {
+      initAudio();
+      isPractice = true;
+      trials = buildTrials(N_PRACTICE);
+      window.addEventListener('keydown', onKeyDown);
+      show($task);
+      await runBlock();
+    });
+
+    $btnDownload.addEventListener('click', () => {
+      const fname = `auditory_results_${runState.pid || 'anon'}_${Date.now()}.csv`;
+      downloadCSV(fname, runState.results);
+    });
+
+    $btnRestart.addEventListener('click', () => {
+      // reset
+      runState = { pid: runState.pid, startedAt: null, trialIndex: -1, awaiting:false, bufferSource:null, stimStartTimeAC:null, stimEndTimeAC:null, results: [] };
+      $bar.style.width = '0%'; $barLabel.textContent = '0%';
+      $('#tone-status').textContent = '未再生';
+      $('#consent').checked = false; $('#pid').value='';
+      show($start);
+    });
+
+    // 入力の変更で開始可否を更新
+    ['change','input'].forEach(evt => {
+      $('#consent').addEventListener(evt, () => updateBar( Object.keys(preloaded).length, TRIALS_MASTER.length ));
+      $('#pid').addEventListener(evt, () => updateBar( Object.keys(preloaded).length, TRIALS_MASTER.length ));
+    });
+
+    // iOS向け: タブが復帰したらAudioContextを起こす
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && ACtx && ACtx.state === 'suspended') ACtx.resume(); });
+
+    // 初期文言
+    show($start);
+  </script>
+</body>
+</html>
