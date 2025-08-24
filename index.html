@@ -81,18 +81,7 @@
         <button id="btn-begin" class="btn primary" disabled>実験を開始</button>
         <button id="btn-practice" class="btn ghost" disabled>練習（数試行）</button>
       </div>
-      <p class="small">再生はユーザー操作後のみ許可されます（ブラウザ仕様）。開始ボタンを押すとオーディオコンテキストが有効化されます。</p>
 
-      <details>
-        <summary>反応キー（デフォルト）</summary>
-        <div class="notice">
-          <div class="kbdrow">
-            <div><span class="kbd">1</span> = 1　/ 選択1</div>
-            <div><span class="kbd">2</span> = 2 / 選択2</div>
-          </div>
-          <p class="small">必要に応じてスクリプト中の <code>KEYMAP</code> を変更してください。</p>
-        </div>
-      </details>
     </section>
 
     <!-- FIXATION / STIM / RESPONSE SCREEN -->
@@ -127,14 +116,14 @@
     // 2) 試行リスト（必要に応じて列を増やしてください）
     //    id: 任意のラベル, file: WAVファイル名, cond: 条件名
     const TRIALS_MASTER = [
-      { id: "ex1", file: "straightLR_CS.wav",  cond: "1", correctKey: "1" },
-      { id: "ex2", file: "straightLR_SC.wav", cond: "2", correctKey: "2" },
-      { id: "ex3", file: "straightRL_CS.wav",  cond: "1", correctKey: "1" },
-      { id: "ex4", file: "straightRL_SC.wav", cond: "2", correctKey: "2" },
-      { id: "ex1", file: "straightLR_CS.wav",  cond: "1", correctKey: "1" },
-      { id: "ex2", file: "straightLR_SC.wav", cond: "2", correctKey: "2" },
-      { id: "ex3", file: "straightRL_CS.wav",  cond: "1", correctKey: "1" },
-      { id: "ex4", file: "straightRL_SC.wav", cond: "2", correctKey: "2" },
+      { id: "ex1", file: "stimLR_CS11.wav",  cond: "1", correctKey: "1" },
+      { id: "ex2", file: "stimLR_SC11.wav", cond: "2", correctKey: "2" },
+      { id: "ex3", file: "stimRL_CS11.wav",  cond: "1", correctKey: "1" },
+      { id: "ex4", file: "stimRL_SC11wav", cond: "2", correctKey: "2" },
+      { id: "ex1", file: "stimLR_CS11.wav",  cond: "1", correctKey: "1" },
+      { id: "ex2", file: "stimLR_SC11.wav", cond: "2", correctKey: "2" },
+      { id: "ex3", file: "stimRL_CS11.wav",  cond: "1", correctKey: "1" },
+      { id: "ex4", file: "stimRL_SC11.wav", cond: "2", correctKey: "2" },
     ];
 
     // 3) 練習試行数
@@ -308,7 +297,7 @@
       // optional prompt
       if (PROMPT_MS > 0) {
         $phase.textContent = '課題';
-        $prompt.textContent = '曲がっているのは？ (1 / 2)';
+        $prompt.textContent = '曲がっているのは？ (1 or 2)';
         await sleep(PROMPT_MS);
       }
 
@@ -394,8 +383,18 @@
     function finish() {
       show($end);
       const n = runState.results.length;
-      const meanRT = Math.round(runState.results.reduce((s,r)=> s + (r.rt_ms||0), 0) / Math.max(1,n));
-      $('#summary').textContent = `全${n}試行 / 平均RT ≈ ${isFinite(meanRT)?meanRT:'-'} ms`;
+      const meanRT = Math.round(
+      runState.results.reduce((s, r) => s + (r.rt_ms || 0), 0) / Math.max(1, n)
+      );
+
+
+      // 正答率を計算
+      const validResults = runState.results.filter(r => r.correct !== null);
+      const nCorrect = validResults.filter(r => r.correct).length;
+      const acc = validResults.length > 0 ? (nCorrect / validResults.length) * 100 : NaN;
+
+
+      $('#summary').textContent = `全${n}試行 / 平均RT ≈ ${isFinite(meanRT) ? meanRT : '-'} ms / 正答率 ≈ ${isFinite(acc) ? acc.toFixed(1) : '-'}%`;
     }
 
     // ================================
